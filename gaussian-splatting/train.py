@@ -29,6 +29,7 @@ from utils.graphics_utils import getWorld2View2, focal2fov
 from tqdm import tqdm
 from utils.general_utils import get_expon_lr_func
 from utils.depth_utils import depth_to_normal
+from models.gaussian_feature_extractor import GaussianFeatureExtractor
 
 try:
     from diff_gaussian_rasterization import SparseGaussianAdam
@@ -95,6 +96,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
+    extractor = GaussianFeatureExtractor()
     gaussians = GaussianModel(
         dataset.sh_degree,
         opt.optimizer_type,
@@ -184,6 +186,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             use_trained_exp=args.use_trained_exp,
             separate_sh=args.separate_sh
         )
+        
+        geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
+
+        if iteration == first_iter:
+            print("Geometry map shape:", geometry_map.shape)
         image = render_pkg["render"]
         viewspace_point_tensor = render_pkg["viewspace_points"]
         visibility_filter = render_pkg["visibility_filter"]
