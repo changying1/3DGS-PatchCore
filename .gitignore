@@ -1,0 +1,31 @@
+# Python
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+
+# Dataset
+heritage_dataset/
+*.zip
+
+# Training outputs
+output/
+gaussian-splatting/output/
+
+# Model weights
+*.pth
+*.ckpt
+*.ply
+
+# Build
+build/
+dist/
+
+# Logs
+tensorboard_3d/
+screenshots/
+
+# Rasterizer build
+gaussian-splatting/diff_rasterization/diff_rast.egg-info
+gaussian-splatting/diff_rasterization/dist
