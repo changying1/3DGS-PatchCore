@@ -1,3 +1,4 @@
+print("LOADED gaussian_feature_extractor:", __file__)
 import torch
 import torch.nn.functional as F
 
@@ -30,20 +31,24 @@ class GaussianFeatureExtractor:
         scales = gaussian_model.get_scaling
         opacities = gaussian_model.get_opacity
 
-        visible_idx = visibility_filter.nonzero(as_tuple=False).squeeze()
+        visible_idx = torch.where(visibility_filter)[0]
 
         if visible_idx.numel() == 0:
             return geometry_map
 
         pts = viewspace_points[visible_idx]
+        if pts.dim() == 1:
+            pts = pts.unsqueeze(0)
+
+        pts = pts[:, :2]
         xs = pts[:, 0].long()
         ys = pts[:, 1].long()
 
         valid = (xs >= 0) & (xs < W) & (ys >= 0) & (ys < H)
 
+        vidx = visible_idx[valid]
         xs = xs[valid]
         ys = ys[valid]
-        vidx = visible_idx[valid]
 
         if vidx.numel() == 0:
             return geometry_map

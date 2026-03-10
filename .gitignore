@@ -1,31 +1,47 @@
 # Python
-*.pyc
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# IDE
+# VSCode
 .vscode/
+
+# Jupyter
+.ipynb_checkpoints/
 
 # Dataset
 heritage_dataset/
-*.zip
 
-# Training outputs
-output/
+# 3DGS output
 gaussian-splatting/output/
 
-# Model weights
+# PatchCore outputs
+my_bridge_code/anomaly_maps/
+my_bridge_code/visualizations/
+
+# Memory bank
+my_bridge_code/memory_bank.pt
+my_bridge_code/memory_bank_coreset.pt
+
+# Model files
+*.pt
 *.pth
-*.ckpt
+
+# 3D data
 *.ply
 
-# Build
+# Logs
+*.log
+
+# Python build
 build/
 dist/
 
-# Logs
-tensorboard_3d/
-screenshots/
+# System
+.DS_Store
+Thumbs.db
 
-# Rasterizer build
-gaussian-splatting/diff_rasterization/diff_rast.egg-info
-gaussian-splatting/diff_rasterization/dist
+gaussian-splatting/submodules/
+
+structure.txt

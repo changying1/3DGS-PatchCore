@@ -14,6 +14,7 @@ import sys
 import torch
 from random import randint
 from argparse import ArgumentParser
+import torchvision
 
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
@@ -28,7 +29,7 @@ from utils.sh_utils import eval_sh
 from utils.graphics_utils import getWorld2View2, focal2fov
 from tqdm import tqdm
 from utils.general_utils import get_expon_lr_func
-from utils.depth_utils import depth_to_normal
+# from utils.depth_utils import depth_to_normal
 from models.gaussian_feature_extractor import GaussianFeatureExtractor
 
 try:
@@ -65,7 +66,7 @@ def apply_wenbao_disease_preset(args, dataset, opt, pipe):
 
     # Optimization tuning (safe, conservative defaults for disease detection)
     conservative = {
-        "iterations": 30000,
+        "iterations": 200,
         "densify_from_iter": 500,
         "densify_until_iter": 12000,
         "densification_interval": 200,
@@ -171,8 +172,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             viewpoint_stack = scene.getTrainCameras().copy()
             viewpoint_indices = list(range(len(viewpoint_stack)))
 
+        if len(viewpoint_indices) == 0:
+            viewpoint_stack = scene.getTrainCameras().copy()
+            viewpoint_indices = list(range(len(viewpoint_stack)))
+
         random_index = randint(0, len(viewpoint_indices) - 1)
-        viewpoint_cam = viewpoint_stack.pop(viewpoint_indices.pop(random_index))
+        cam_index = viewpoint_indices.pop(random_index)
+        viewpoint_cam = viewpoint_stack[cam_index]
 
         if (iteration - 1) == debug_from:
             pipe.debug = True
@@ -189,9 +195,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         
         geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
 
+        image = render_pkg["render"]
+
+        if iteration % 20 == 0:
+            for c in range(5):
+                save_path = os.path.join(scene.model_path, f"geometry_c{c}_{iteration}.png")
+                torchvision.utils.save_image(geometry_map[c:c+1], save_path)
+                
+            rgb_path = os.path.join(scene.model_path, f"rgb_{iteration}.png")
+            torchvision.utils.save_image(image, rgb_path)
+
         if iteration == first_iter:
             print("Geometry map shape:", geometry_map.shape)
-        image = render_pkg["render"]
+        
         viewspace_point_tensor = render_pkg["viewspace_points"]
         visibility_filter = render_pkg["visibility_filter"]
         radii = render_pkg["radii"]
@@ -206,7 +222,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # DSSIM weight is small in this preset to preserve thin cracks
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-        if opt.depth_l1_weight_init > 0 and viewpoint_cam.depth is not None:
+        if hasattr(viewpoint_cam, "depth") and viewpoint_cam.depth is not None:
             depth = render_pkg.get("depth", None)
             if depth is not None:
                 gt_depth = viewpoint_cam.depth.cuda()
