@@ -3,9 +3,9 @@ import os
 import numpy as np
 
 rgb_dir = "../gaussian-splatting/output/test/test_0"
-anomaly_dir = "anomaly_maps"
+anomaly_dir = "anomaly_maps/test_0"
 
-save_dir = "visualizations"
+save_dir = "visualizations/test_0"
 os.makedirs(save_dir, exist_ok=True)
 
 rgb_files = sorted([

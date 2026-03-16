@@ -1,8 +1,7 @@
 import torch
-import os
 
 
-def greedy_coreset(features: torch.Tensor, sample_ratio: float = 0.1):
+def greedy_coreset(features: torch.Tensor, sample_ratio: float = 0.01):
     """
     features: [N, C]
     return: sampled_features [M, C]
@@ -15,19 +14,21 @@ def greedy_coreset(features: torch.Tensor, sample_ratio: float = 0.1):
     selected_indices = []
     remaining_indices = list(range(N))
 
-    # 先随机选一个起点
     first_idx = 0
     selected_indices.append(first_idx)
     remaining_indices.remove(first_idx)
 
-    selected = features[first_idx:first_idx+1]
+    selected = features[first_idx:first_idx + 1]
     min_distances = torch.cdist(features, selected).squeeze(1)
 
-    for _ in range(M - 1):
+    for i in range(M - 1):
+        if i % 100 == 0:
+            print(f"Sampling step {i}/{M - 1}")
+
         farthest_idx = torch.argmax(min_distances).item()
         selected_indices.append(farthest_idx)
 
-        new_selected = features[farthest_idx:farthest_idx+1]
+        new_selected = features[farthest_idx:farthest_idx + 1]
         new_dist = torch.cdist(features, new_selected).squeeze(1)
         min_distances = torch.minimum(min_distances, new_dist)
 
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     memory_bank = torch.load(memory_bank_path)
     print("Original memory bank:", memory_bank.shape)
 
-    sampled = greedy_coreset(memory_bank, sample_ratio=0.1)
+    sampled = greedy_coreset(memory_bank, sample_ratio=0.01)
 
     print("Coreset memory bank:", sampled.shape)
 

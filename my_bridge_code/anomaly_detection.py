@@ -17,8 +17,8 @@ data_dir = os.environ.get(
     "DATA_DIR",
     "../gaussian-splatting/output/test/test_0"
 )
-memory_bank_path = "memory_bank.pt"
-save_dir = "anomaly_maps"
+memory_bank_path = "memory_bank_coreset.pt"
+save_dir = "anomaly_maps/test_0"
 
 os.makedirs(save_dir, exist_ok=True)
 
