@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 from PIL import Image
+import numpy as np
 
 
 class GaussianPatchCoreDataset(Dataset):
@@ -53,10 +54,18 @@ class GaussianPatchCoreDataset(Dataset):
 
         rgb = Image.open(rgb_path).convert("RGB")
 
+        w, h = rgb.size
+        crop_size = int(min(w, h) * 0.7)
+        left = (w - crop_size) // 2
+        top = (h - crop_size) // 2
+
+        rgb = rgb.crop((left, top, left + crop_size, top + crop_size))
         rgb = self.transform(rgb)
 
         geom = self.load_geometry(idx)
+        geom = geom[:, top:top + crop_size, left:left + crop_size]
 
         x = torch.cat([rgb, geom], dim=0)
-
+        # x = rgb
+        # return rgb
         return x

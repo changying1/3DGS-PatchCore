@@ -2,7 +2,7 @@ import cv2
 import os
 import numpy as np
 
-rgb_dir = "../gaussian-splatting/output/test"
+rgb_dir = "../gaussian-splatting/output/test/test_0"
 anomaly_dir = "anomaly_maps"
 
 save_dir = "visualizations"
@@ -22,6 +22,14 @@ for i, rgb_name in enumerate(rgb_files):
     anomaly = cv2.imread(anomaly_path, 0)
 
     anomaly = cv2.resize(anomaly, (rgb.shape[1], rgb.shape[0]))
+
+    anomaly = anomaly.astype(np.float32)
+    anomaly = (anomaly - anomaly.min()) / (anomaly.max() - anomaly.min() + 1e-6)
+    anomaly = (anomaly * 255).astype(np.uint8)
+
+    gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+    mask = gray > 10
+    anomaly = anomaly * mask
 
     heatmap = cv2.applyColorMap(anomaly, cv2.COLORMAP_JET)
 

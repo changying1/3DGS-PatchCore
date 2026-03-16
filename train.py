@@ -66,7 +66,7 @@ def apply_wenbao_disease_preset(args, dataset, opt, pipe):
 
     # Optimization tuning (safe, conservative defaults for disease detection)
     conservative = {
-        "iterations": 200,
+        "iterations": 3000,
         "densify_from_iter": 500,
         "densify_until_iter": 12000,
         "densification_interval": 200,
@@ -192,12 +192,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             use_trained_exp=args.use_trained_exp,
             separate_sh=args.separate_sh
         )
-        
-        geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
 
         image = render_pkg["render"]
 
-        if iteration % 20 == 0:
+        if iteration % 200 == 0:
+            with torch.no_grad():
+                geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
+
+            print("Geometry map shape:", geometry_map.shape)
             for c in range(5):
                 save_path = os.path.join(scene.model_path, f"geometry_c{c}_{iteration}.png")
                 torchvision.utils.save_image(geometry_map[c:c+1], save_path)
@@ -205,8 +207,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             rgb_path = os.path.join(scene.model_path, f"rgb_{iteration}.png")
             torchvision.utils.save_image(image, rgb_path)
 
-        if iteration == first_iter:
-            print("Geometry map shape:", geometry_map.shape)
         
         viewspace_point_tensor = render_pkg["viewspace_points"]
         visibility_filter = render_pkg["visibility_filter"]
@@ -232,7 +232,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 ema_Ll1depth_for_log = 0.4 * Ldepth.item() + 0.6 * ema_Ll1depth_for_log
 
         loss.backward()
-
+        torch.cuda.empty_cache()
         iter_end.record()
 
         with torch.no_grad():
@@ -267,14 +267,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    radii = gaussians.get_radii()
                     gaussians.densify_and_prune(
                         opt.densify_grad_threshold,
                         0.005,
                         scene.cameras_extent,
                         size_threshold,
                         radii
-                )
+                    )
 
                 if iteration % opt.opacity_reset_interval == 0 or (
                     dataset.white_background and iteration == opt.densify_from_iter

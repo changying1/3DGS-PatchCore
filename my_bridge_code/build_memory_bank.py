@@ -5,7 +5,7 @@ from tqdm import tqdm
 from gaussian_patchcore_dataset import GaussianPatchCoreDataset
 from gaussian_patchcore_model import GaussianPatchCoreBackbone
 
-data_dir = "../gaussian-splatting/output/test"
+data_dir = "../gaussian-splatting/output/test/test_0"
 
 dataset = GaussianPatchCoreDataset(data_dir)
 
@@ -19,7 +19,16 @@ for i in tqdm(range(len(dataset))):
     x = dataset[i].unsqueeze(0)
 
     with torch.no_grad():
-        feat = model(x)
+        f2, f3 = model(x)
+
+    f3 = torch.nn.functional.interpolate(
+        f3,
+        size=f2.shape[-2:],
+        mode="bilinear",
+        align_corners=False
+    )
+
+    feat = torch.cat([f2, f3], dim=1)
 
     B, C, H, W = feat.shape
 

@@ -13,8 +13,11 @@ from gaussian_patchcore_model import GaussianPatchCoreBackbone
 # config
 # ------------------------
 
-data_dir = "../gaussian-splatting/output/test"
-memory_bank_path = "memory_bank_coreset.pt"
+data_dir = os.environ.get(
+    "DATA_DIR",
+    "../gaussian-splatting/output/test/test_0"
+)
+memory_bank_path = "memory_bank.pt"
 save_dir = "anomaly_maps"
 
 os.makedirs(save_dir, exist_ok=True)
@@ -55,8 +58,17 @@ for idx in tqdm(range(len(dataset))):
 
     with torch.no_grad():
 
-        feat = model(x)
+        f2, f3 = model(x)
 
+    f3 = torch.nn.functional.interpolate(
+        f3,
+        size=f2.shape[-2:],
+        mode="bilinear",
+        align_corners=False
+    )
+
+    feat = torch.cat([f2, f3], dim=1)
+    
     B,C,H,W = feat.shape
 
     patches = feat.permute(0,2,3,1).reshape(-1,C)
@@ -67,11 +79,10 @@ for idx in tqdm(range(len(dataset))):
     # compute distance
     dist = torch.cdist(patches, memory_bank)
 
-    min_dist = dist.min(dim=1)[0]
-
+    topk = torch.topk(dist, k=9, largest=False)[0]
+    min_dist = topk.mean(dim=1)
+    
     anomaly_map = min_dist.reshape(H,W)
-
-    anomaly_map = min_dist.reshape(H, W)
 
     # normalize
     anomaly_map = (anomaly_map - anomaly_map.min()) / (anomaly_map.max() - anomaly_map.min() + 1e-6)
