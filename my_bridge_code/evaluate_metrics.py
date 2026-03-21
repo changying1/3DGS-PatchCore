@@ -3,8 +3,8 @@ import cv2
 import numpy as np
 from sklearn.metrics import roc_auc_score, f1_score
 
-anomaly_dir = "anomaly_maps"
-mask_dir = "synthetic_crack_masks"
+anomaly_dir = "anomaly_maps/test_0"
+mask_dir = "synthetic_crack_masks/test_0"
 
 anomaly_files = sorted(os.listdir(anomaly_dir))
 mask_files = sorted(os.listdir(mask_dir))

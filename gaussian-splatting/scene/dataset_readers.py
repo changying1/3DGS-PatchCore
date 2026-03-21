@@ -149,12 +149,28 @@ def readColmapSceneInfo(path, images, depths, eval, train_test_exp, llffhold=8):
         cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
         cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
     except:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
-        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+        # Check if the folder is like 0, 1, 2... directly in 'path' (heritage dataset case)
+        if not os.path.exists(os.path.join(path, "sparse/0")):
+            cameras_extrinsic_file = os.path.join(path, "images.bin")
+            cameras_intrinsic_file = os.path.join(path, "cameras.bin")
+            try:
+                cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
+                cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
+                path_prefix = ""
+            except:
+                cameras_extrinsic_file = os.path.join(path, "images.txt")
+                cameras_intrinsic_file = os.path.join(path, "cameras.txt")
+                cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
+                cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+                path_prefix = ""
+        else:
+            cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
+            cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
+            cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
+            cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+            path_prefix = "sparse/0"
 
-    depth_params_file = os.path.join(path, "sparse/0", "depth_params.json")
+    depth_params_file = os.path.join(path, path_prefix, "depth_params.json")
     ## if depth_params_file isnt there AND depths file is here -> throw error
     depths_params = None
     if depths != "":
@@ -185,7 +201,7 @@ def readColmapSceneInfo(path, images, depths, eval, train_test_exp, llffhold=8):
             cam_names = sorted(cam_names)
             test_cam_names_list = [name for idx, name in enumerate(cam_names) if idx % llffhold == 0]
         else:
-            with open(os.path.join(path, "sparse/0", "test.txt"), 'r') as file:
+            with open(os.path.join(path, path_prefix if path_prefix else "", "test.txt"), 'r') as file:
                 test_cam_names_list = [line.strip() for line in file]
     else:
         test_cam_names_list = []
@@ -193,7 +209,7 @@ def readColmapSceneInfo(path, images, depths, eval, train_test_exp, llffhold=8):
     reading_dir = "images" if images == None else images
     cam_infos_unsorted = readColmapCameras(
         cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, depths_params=depths_params,
-        images_folder=os.path.join(path, reading_dir), 
+        images_folder=os.path.abspath(os.path.join(path, reading_dir)) if os.path.isabs(reading_dir) else os.path.join(path, reading_dir), 
         depths_folder=os.path.join(path, depths) if depths != "" else "", test_cam_names_list=test_cam_names_list)
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
@@ -202,9 +218,9 @@ def readColmapSceneInfo(path, images, depths, eval, train_test_exp, llffhold=8):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    ply_path = os.path.join(path, "sparse/0/points3D.ply")
-    bin_path = os.path.join(path, "sparse/0/points3D.bin")
-    txt_path = os.path.join(path, "sparse/0/points3D.txt")
+    ply_path = os.path.join(path, path_prefix, "points3D.ply")
+    bin_path = os.path.join(path, path_prefix, "points3D.bin")
+    txt_path = os.path.join(path, path_prefix, "points3D.txt")
     if not os.path.exists(ply_path):
         print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
         try:

@@ -66,13 +66,13 @@ def apply_wenbao_disease_preset(args, dataset, opt, pipe):
 
     # Optimization tuning (safe, conservative defaults for disease detection)
     conservative = {
-        "iterations": 200,
+        # "iterations": 200,   # Commented out to respect command line --iterations
         "densify_from_iter": 500,
         "densify_until_iter": 12000,
         "densification_interval": 200,
         "opacity_reset_interval": 3000,
         "percent_dense": 0.01,
-        "lambda_dssim": 0.1,
+        "lambda_dssim": 0.0,
         "random_background": False,
     }
     for k, v in conservative.items():
@@ -84,8 +84,27 @@ def apply_wenbao_disease_preset(args, dataset, opt, pipe):
     if hasattr(dataset, "sh_degree"):
         dataset.sh_degree = min(getattr(dataset, "sh_degree", 3), 2)
 
+def save_single_channel_vis(ch, save_path, gamma=0.6, low_ratio=0.05):
+    ch = ch.detach().clone()
+    ch = torch.nan_to_num(ch, nan=0.0, posinf=0.0, neginf=0.0)
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+    flat = ch.flatten()
+
+    q_low = torch.quantile(flat, low_ratio)
+    q_high = torch.quantile(flat, 0.99)
+
+    ch = torch.clamp(ch, q_low, q_high)
+
+    if (q_high - q_low) > 1e-8:
+        ch = (ch - q_low) / (q_high - q_low)
+    else:
+        ch = torch.zeros_like(ch)
+
+    ch = ch.clamp(0, 1) ** gamma
+    torchvision.utils.save_image(ch.unsqueeze(0), save_path)
+
+def training(dataset, opt, pipe, testing_iterations, saving_iterations,
+             checkpoint_iterations, checkpoint, debug_from, args):
 
     if not SPARSE_ADAM_AVAILABLE and opt.optimizer_type == "sparse_adam":
         sys.exit(
@@ -192,22 +211,34 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             use_trained_exp=args.use_trained_exp,
             separate_sh=args.separate_sh
         )
-        
-        geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
 
         image = render_pkg["render"]
 
-        if iteration % 20 == 0:
-            for c in range(5):
-                save_path = os.path.join(scene.model_path, f"geometry_c{c}_{iteration}.png")
-                torchvision.utils.save_image(geometry_map[c:c+1], save_path)
-                
+        # 保留 geometry 供后续 8 通道链路使用
+        #geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
+
+        # 只在首轮和可视化轮次做打印/保存，避免频繁 IO
+        save_geometry_vis = (iteration == first_iter) or (iteration % 20 == 0)
+
+        geometry_map = None
+        if save_geometry_vis:
+            with torch.no_grad():
+                geometry_map = extractor.extract_geometry_map(render_pkg, gaussians)
+
+        if iteration == first_iter and geometry_map is not None:
+            print("Geometry map shape:", tuple(geometry_map.shape))
+
+        if save_geometry_vis and geometry_map is not None:
+            print(f"\n[Iter {iteration}] geometry stats:")
+            for c in range(geometry_map.shape[0]):
+                save_path = os.path.join(
+                    scene.model_path, f"geometry_c{c}_{iteration}.png"
+                )
+                save_single_channel_vis(geometry_map[c], save_path)
+
             rgb_path = os.path.join(scene.model_path, f"rgb_{iteration}.png")
             torchvision.utils.save_image(image, rgb_path)
-
-        if iteration == first_iter:
-            print("Geometry map shape:", geometry_map.shape)
-        
+            
         viewspace_point_tensor = render_pkg["viewspace_points"]
         visibility_filter = render_pkg["visibility_filter"]
         radii = render_pkg["radii"]
@@ -220,7 +251,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         Ll1 = l1_loss(image, gt_image)
 
         # DSSIM weight is small in this preset to preserve thin cracks
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        if opt.lambda_dssim > 0:
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        else:
+            loss = Ll1
 
         if hasattr(viewpoint_cam, "depth") and viewpoint_cam.depth is not None:
             depth = render_pkg.get("depth", None)
@@ -267,14 +301,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    radii = gaussians.get_radii()
                     gaussians.densify_and_prune(
                         opt.densify_grad_threshold,
                         0.005,
                         scene.cameras_extent,
                         size_threshold,
                         radii
-                )
+                    )
 
                 if iteration % opt.opacity_reset_interval == 0 or (
                     dataset.white_background and iteration == opt.densify_from_iter
@@ -284,7 +317,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Test
             if iteration in testing_iterations:
                 test_and_log(tb_writer, iteration, Ll1, loss, iter_start.elapsed_time(iter_end), scene, render, (pipe, background),
-                             use_trained_exp=args.use_trained_exp, separate_sh=args.separate_sh)
+                            use_trained_exp=args.use_trained_exp, separate_sh=args.separate_sh)
 
 
 def prepare_output_and_logger(args):
@@ -418,7 +451,8 @@ if __name__ == "__main__":
         args.save_iterations,
         args.checkpoint_iterations,
         args.start_checkpoint,
-        args.debug_from
+        args.debug_from,
+        args
     )
 
     print("\nTraining complete.")
