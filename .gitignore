@@ -47,13 +47,14 @@ gaussian-splatting/submodules/
 structure.txt
 
 gaussian-splatting/output
-heritage_dataset\images
-heritage_dataset\sparse
-my_bridge_code\anomaly_maps
-my_bridge_code\anomaly_maps_rgb
-my_bridge_code\synthetic_crack_images
-my_bridge_code\synthetic_crack_masks
-my_bridge_code\visualizations
-my_bridge_code\visualizations_rgb
-my_bridge_code\memory_bank_coreset.pt
-my_bridge_code\memory_bank.pt
+heritage_dataset/images
+heritage_dataset/sparse
+my_bridge_code/synthetic_crack_images/
+my_bridge_code/synthetic_crack_masks/
+my_bridge_code/anomaly_maps/
+my_bridge_code/anomaly_maps_rgb/
+my_bridge_code/visualizations/
+my_bridge_code/visualizations_rgb/
+my_bridge_code/memory_bank.pt
+my_bridge_code/memory_bank_coreset.pt
+heritage_dataset.zip

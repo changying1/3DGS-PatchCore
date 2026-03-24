@@ -90,8 +90,8 @@ for idx in tqdm(range(len(dataset))):
     # gaussian smoothing
     anomaly_map = anomaly_map.unsqueeze(0).unsqueeze(0)
 
-    kernel_size = 21
-    sigma = 4.0
+    kernel_size = 11
+    sigma = 2.0
 
     grid = torch.arange(kernel_size).float() - kernel_size//2
     gauss = torch.exp(-(grid**2)/(2*sigma**2))
