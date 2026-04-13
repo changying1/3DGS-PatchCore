@@ -2,7 +2,8 @@ import os
 import re
 import cv2
 import numpy as np
-from sklearn.metrics import roc_auc_score, f1_score
+from sklearn.metrics import precision_recall_curve, roc_auc_score, auc
+
 
 # -----------------------
 # config
@@ -145,8 +146,16 @@ for i in range(num_samples):
     mask_crop = mask[top:top + crop_size, left:left + crop_size]
     valid_crop = eval_valid[top:top + crop_size, left:left + crop_size]
 
-    mask_crop = cv2.resize(mask_crop, (anomaly.shape[1], anomaly.shape[0]), interpolation=cv2.INTER_NEAREST)
-    valid_crop = cv2.resize(valid_crop.astype(np.uint8), (anomaly.shape[1], anomaly.shape[0]), interpolation=cv2.INTER_NEAREST)
+    mask_crop = cv2.resize(
+        mask_crop,
+        (anomaly.shape[1], anomaly.shape[0]),
+        interpolation=cv2.INTER_NEAREST
+    )
+    valid_crop = cv2.resize(
+        valid_crop.astype(np.uint8),
+        (anomaly.shape[1], anomaly.shape[0]),
+        interpolation=cv2.INTER_NEAREST
+    )
 
     anomaly = anomaly.astype(np.float32) / 255.0
     mask_bin = (mask_crop > 128).astype(np.uint8)
@@ -173,12 +182,19 @@ if len(np.unique(all_labels)) < 2:
 
 auroc = roc_auc_score(all_labels, all_scores)
 
-# 固定阈值版本
-pred = (all_scores > 0.5).astype(np.uint8)
-f1 = f1_score(all_labels, pred)
+precision, recall, thresholds = precision_recall_curve(all_labels, all_scores)
+f1_list = 2 * precision * recall / (precision + recall + 1e-12)
+best_idx = np.argmax(f1_list)
+best_f1 = f1_list[best_idx]
+best_thr = thresholds[max(best_idx - 1, 0)] if len(thresholds) > 0 else 0.5
+aupr = auc(recall, precision)
 
+print("Pixel AUROC:", auroc)
+print("Pixel AUPR:", aupr)
+print("Best Pixel F1:", best_f1)
+print("Best threshold:", best_thr)
 print("Pixel AUROC (geometry-aware valid region):", auroc)
-print("Pixel F1 (geometry-aware valid region):", f1)
+print("Best Pixel F1 (geometry-aware valid region):", best_f1)
 print("Num valid pixels:", len(all_scores))
 print("Num positive pixels:", int(all_labels.sum()))
 print("Num negative pixels:", int((all_labels == 0).sum()))
