@@ -11,6 +11,7 @@
 
 import os
 import sys
+import numpy as np
 import torch
 from random import randint
 from argparse import ArgumentParser
@@ -102,6 +103,37 @@ def save_single_channel_vis(ch, save_path, gamma=0.6, low_ratio=0.05):
 
     ch = ch.clamp(0, 1) ** gamma
     torchvision.utils.save_image(ch.unsqueeze(0), save_path)
+
+def save_geometry_npz(geometry_map, save_path, iteration=None):
+    """
+    Save raw geometry map as float32 .npz for downstream segmentation training.
+    geometry_map: torch.Tensor, expected shape [C, H, W]
+    """
+    geometry_np = (
+        geometry_map.detach()
+        .clone()
+        .float()
+        .cpu()
+        .numpy()
+        .astype(np.float32)
+    )
+
+    # 清理异常值，避免后续读取时出问题
+    geometry_np = np.nan_to_num(
+        geometry_np,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0
+    )
+
+    save_dict = {
+        "geometry": geometry_np,
+    }
+
+    if iteration is not None:
+        save_dict["iteration"] = np.array([iteration], dtype=np.int32)
+
+    np.savez_compressed(save_path, **save_dict)
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations,
              checkpoint_iterations, checkpoint, debug_from, args):
@@ -230,14 +262,44 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations,
 
         if save_geometry_vis and geometry_map is not None:
             print(f"\n[Iter {iteration}] geometry stats:")
+
+            # 打印每个通道的原始数值统计
             for c in range(geometry_map.shape[0]):
+                ch = geometry_map[c].detach()
+                ch = torch.nan_to_num(ch, nan=0.0, posinf=0.0, neginf=0.0)
+                ch_min = ch.min().item()
+                ch_max = ch.max().item()
+                ch_mean = ch.mean().item()
+                ch_std = ch.std().item()
+                print(
+                    f"  channel {c}: "
+                    f"min={ch_min:.6f}, max={ch_max:.6f}, "
+                    f"mean={ch_mean:.6f}, std={ch_std:.6f}"
+                )
+
+                # 保留原有可视化 PNG
                 save_path = os.path.join(
-                    scene.model_path, f"geometry_c{c}_{iteration}.png"
+                    scene.model_path,
+                    f"geometry_c{c}_{iteration}.png"
                 )
                 save_single_channel_vis(geometry_map[c], save_path)
 
+            # 新增：保存原始 float32 geometry
+            geometry_npz_path = os.path.join(
+                scene.model_path,
+                f"geometry_map_{iteration}.npz"
+            )
+            save_geometry_npz(
+                geometry_map,
+                geometry_npz_path,
+                iteration=iteration
+            )
+
+            # 继续保留 RGB 可视化
             rgb_path = os.path.join(scene.model_path, f"rgb_{iteration}.png")
             torchvision.utils.save_image(image, rgb_path)
+
+            print(f"  saved raw geometry npz: {geometry_npz_path}")
             
         viewspace_point_tensor = render_pkg["viewspace_points"]
         visibility_filter = render_pkg["visibility_filter"]

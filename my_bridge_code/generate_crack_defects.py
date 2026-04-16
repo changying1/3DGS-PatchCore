@@ -7,10 +7,10 @@ import random
 # config
 # -----------------------
 
-rgb_dir = "../gaussian-splatting/output/test/test_0"
+rgb_dir = "../gaussian-splatting/output/test/test_r1"
 
-save_img_dir = "synthetic_crack_images/test_0"
-save_mask_dir = "synthetic_crack_masks/test_0"
+save_img_dir = "synthetic_crack_images/test_r1"
+save_mask_dir = "synthetic_crack_masks/test_r1"
 
 os.makedirs(save_img_dir, exist_ok=True)
 os.makedirs(save_mask_dir, exist_ok=True)
@@ -217,12 +217,12 @@ for idx_file, rgb_name in enumerate(rgb_files):
     # 生成裂纹
     img_crack, crack_mask = draw_random_crack_in_valid_region(img, valid_mask)
 
-    img_save = os.path.join(save_img_dir, f"crack_{idx_file}.png")
-    mask_save = os.path.join(save_mask_dir, f"mask_{idx_file}.png")
+    img_save = os.path.join(save_img_dir, f"crack_{idx}.png")
+    mask_save = os.path.join(save_mask_dir, f"mask_{idx}.png")
 
     cv2.imwrite(img_save, img_crack)
     cv2.imwrite(mask_save, crack_mask)
 
-    print(f"[OK] {rgb_name} -> crack_{idx_file}.png / mask_{idx_file}.png")
+    print(f"[OK] {rgb_name} -> crack_{idx}.png / mask_{idx}.png")
 
 print("Crack dataset generated with geometry-aware valid region.")

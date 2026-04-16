@@ -1,0 +1,7 @@
+D:\My_Thesis_Project\3DGS-PatchCore\gaussian-splatting\train.py
+D:\My_Thesis_Project\3DGS-PatchCore\my_bridge_code\test_seg_dataset.py
+D:\My_Thesis_Project\3DGS-PatchCore\my_bridge_code\gaussian_seg_dataset.py
+D:\My_Thesis_Project\3DGS-PatchCore\my_bridge_code\generate_crack_defects.py
+D:\My_Thesis_Project\3DGS-PatchCore\my_bridge_code\gaussian_crack_seg_dataset.py
+D:\My_Thesis_Project\3DGS-PatchCore\my_bridge_code\unet_model.py
+D:\My_Thesis_Project\3DGS-PatchCore\my_bridge_code\train_unet.py

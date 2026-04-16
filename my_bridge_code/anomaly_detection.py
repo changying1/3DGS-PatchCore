@@ -26,6 +26,48 @@ os.makedirs(save_dir, exist_ok=True)
 
 
 # ------------------------
+# helper: laplacian prior
+# ------------------------
+
+def get_laplacian_prior(x_rgb: torch.Tensor, out_h: int, out_w: int) -> torch.Tensor:
+    """
+    x_rgb: [1, 3, Hc, Wc], value range roughly [0,1]
+    return: [H, W] normalized laplacian map
+    """
+    # 转灰度
+    gray = (
+        0.2989 * x_rgb[:, 0:1, :, :] +
+        0.5870 * x_rgb[:, 1:2, :, :] +
+        0.1140 * x_rgb[:, 2:3, :, :]
+    )
+
+    # 3x3 Laplacian
+    lap_kernel = torch.tensor(
+        [[0.0,  1.0, 0.0],
+         [1.0, -4.0, 1.0],
+         [0.0,  1.0, 0.0]],
+        device=gray.device,
+        dtype=gray.dtype
+    ).view(1, 1, 3, 3)
+
+    lap = F.conv2d(gray, lap_kernel, padding=1)
+    lap = torch.abs(lap)
+
+    # 上采样到 anomaly feature map 分辨率
+    lap = F.interpolate(
+        lap,
+        size=(out_h, out_w),
+        mode="bilinear",
+        align_corners=False
+    )[0, 0]
+
+    # 归一化
+    lap = (lap - lap.min()) / (lap.max() - lap.min() + 1e-6)
+
+    return lap
+
+
+# ------------------------
 # load memory bank
 # ------------------------
 
@@ -105,31 +147,27 @@ for idx in tqdm(range(len(dataset))):
     )
 
     anomaly_map = anomaly_map[0, 0]
+
     # normalize
     anomaly_map = (anomaly_map - anomaly_map.min()) / (
         anomaly_map.max() - anomaly_map.min() + 1e-6
     )
 
-    """
-    # geometry-aware reweight
-    geo = x[0, 3:, :, :]   # [5, Hc, Wc]
-    geo_edge = geo[2:5].mean(dim=0, keepdim=True).unsqueeze(0)
-    geo_edge = F.interpolate(
-        geo_edge,
-        size=(H, W),
-        mode="bilinear",
-        align_corners=False
-    )[0, 0]
+    # ------------------------
+    # scheme C: laplacian prior reweight
+    # ------------------------
+    rgb = x[:, 0:3, :, :]  # [1,3,Hc,Wc]
+    lap_map = get_laplacian_prior(rgb, H, W)
 
-    geo_edge = (geo_edge - geo_edge.min()) / (
-        geo_edge.max() - geo_edge.min() + 1e-6
-    )
+    # 只做轻量增强，避免把所有边缘都打亮
+    alpha = 0.20
+    anomaly_map = anomaly_map * (1.0 + alpha * lap_map)
 
-    anomaly_map = anomaly_map * (1.0 + 0.35 * geo_edge)
+    # re-normalize
     anomaly_map = (anomaly_map - anomaly_map.min()) / (
         anomaly_map.max() - anomaly_map.min() + 1e-6
     )
-    """
+
     # upsample back to cropped image size
     anomaly_map = anomaly_map.unsqueeze(0).unsqueeze(0)
 
