@@ -51,11 +51,11 @@ heritage_dataset/images
 heritage_dataset/sparse
 my_bridge_code/synthetic_crack_images/
 my_bridge_code/synthetic_crack_masks/
-my_bridge_code/anomaly_maps/
-my_bridge_code/anomaly_maps_rgb/
-my_bridge_code/visualizations/
-my_bridge_code/visualizations_rgb/
-my_bridge_code/memory_bank.pt
-my_bridge_code/memory_bank_coreset.pt
+legacy_patchcore/anomaly_maps/
+legacy_patchcore/anomaly_maps_rgb/
+legacy_patchcore/visualizations/
+legacy_patchcore/visualizations_rgb/
+legacy_patchcore/memory_bank.pt
+legacy_patchcore/memory_bank_coreset.pt
 heritage_dataset.zip
 gaussian-splatting/output - 副本
