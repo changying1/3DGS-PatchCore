@@ -50,6 +50,8 @@ def get_in_channels(mode):
         return 3
     elif mode == "rgb_g0":
         return 4
+    elif mode == "rgb_g0123":
+        return 7
     elif mode == "rgb_g01234":
         return 8
     else:
@@ -58,7 +60,7 @@ def get_in_channels(mode):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="rgb", choices=["rgb", "rgb_g0", "rgb_g01234"])
+    parser.add_argument("--mode", type=str, default="rgb", choices=["rgb", "rgb_g0", "rgb_g0123", "rgb_g01234"])
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--lr", type=float, default=1e-3)
