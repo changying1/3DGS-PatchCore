@@ -2,6 +2,7 @@ import os
 import random
 import numpy as np
 import argparse
+import csv
 
 import torch
 import torch.nn as nn
@@ -104,7 +105,7 @@ def main():
     train_ids = [x.strip() for x in args.train_ids.split(",") if x.strip()]
     val_id = args.val_id.strip()
 
-    save_dir = f"./checkpoints_unet/fold_val{val_id}/{mode}/seed{seed}"
+    save_dir = f"./checkpoints_unet_v2/fold_val{val_id}/{mode}/seed{seed}"
     # ===================================
 
     os.makedirs(save_dir, exist_ok=True)
@@ -164,6 +165,21 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     best_val_loss = 1e9
+    best_val_iou = -1.0
+
+    log_csv_path = os.path.join(save_dir, "log.csv")
+
+    with open(log_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "epoch",
+            "train_loss",
+            "train_iou",
+            "val_loss",
+            "val_iou",
+            "is_best_loss",
+            "is_best_iou"
+        ])
 
     print(f"train_ids={train_ids}, val_id={val_id}")
     print(f"dataset total={total_len}, train={train_len}, val={val_len}")
@@ -229,6 +245,11 @@ def main():
             f"val_loss={val_loss:.6f}, val_iou={val_iou:.6f}"
         )
 
+        is_best_loss = val_loss < best_val_loss
+        is_best_iou = val_iou > best_val_iou
+        best_val_loss_after = min(best_val_loss, val_loss)
+        best_val_iou_after = max(best_val_iou, val_iou)
+
         latest_path = os.path.join(save_dir, "latest.pth")
         torch.save(
             {
@@ -236,25 +257,83 @@ def main():
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "mode": mode,
+                "train_loss": train_loss,
+                "train_iou": train_iou,
                 "val_loss": val_loss,
+                "val_iou": val_iou,
+                "best_val_loss_so_far": best_val_loss_after,
+                "best_val_iou_so_far": best_val_iou_after,
+                "train_ids": train_ids,
+                "val_id": val_id,
+                "batch_size": batch_size,
+                "lr": lr,
+                "base_channels": base_channels,
+                "seed": seed,
             },
             latest_path
         )
 
-        if val_loss < best_val_loss:
+        if is_best_loss:
             best_val_loss = val_loss
-            best_path = os.path.join(save_dir, "best.pth")
+            best_loss_path = os.path.join(save_dir, "best_loss.pth")
             torch.save(
                 {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "mode": mode,
+                    "train_loss": train_loss,
+                    "train_iou": train_iou,
                     "val_loss": val_loss,
+                    "val_iou": val_iou,
+                    "best_type": "loss",
+                    "train_ids": train_ids,
+                    "val_id": val_id,
+                    "batch_size": batch_size,
+                    "lr": lr,
+                    "base_channels": base_channels,
+                    "seed": seed,
                 },
-                best_path
+                best_loss_path
             )
-            print(f"  [OK] best model saved to {best_path}")
+            print(f"  [OK] best loss model saved to {best_loss_path}")
+
+        if is_best_iou:
+            best_val_iou = val_iou
+            best_iou_path = os.path.join(save_dir, "best_iou.pth")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "mode": mode,
+                    "train_loss": train_loss,
+                    "train_iou": train_iou,
+                    "val_loss": val_loss,
+                    "val_iou": val_iou,
+                    "best_type": "iou",
+                    "train_ids": train_ids,
+                    "val_id": val_id,
+                    "batch_size": batch_size,
+                    "lr": lr,
+                    "base_channels": base_channels,
+                    "seed": seed,
+                },
+                best_iou_path
+            )
+            print(f"  [OK] best iou model saved to {best_iou_path}")
+
+        with open(log_csv_path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                epoch,
+                train_loss,
+                train_iou,
+                val_loss,
+                val_iou,
+                int(is_best_loss),
+                int(is_best_iou),
+            ])
 
 
 if __name__ == "__main__":
