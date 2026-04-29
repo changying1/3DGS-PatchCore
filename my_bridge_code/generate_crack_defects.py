@@ -7,10 +7,10 @@ import random
 # config
 # -----------------------
 
-rgb_dir = "../gaussian-splatting/output/test/test_r1"
+rgb_dir = "../gaussian-splatting/output/test/test_2"
 
-save_img_dir = "synthetic_crack_images/test_r1"
-save_mask_dir = "synthetic_crack_masks/test_r1"
+save_img_dir = "synthetic_crack_images/test_2"
+save_mask_dir = "synthetic_crack_masks/test_2"
 
 os.makedirs(save_img_dir, exist_ok=True)
 os.makedirs(save_mask_dir, exist_ok=True)

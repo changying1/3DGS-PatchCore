@@ -1,13 +1,11 @@
 import os
 import random
 import numpy as np
-from PIL import Image
 import argparse
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, random_split
-import torchvision.transforms as T
+from torch.utils.data import DataLoader, ConcatDataset
 
 from gaussian_crack_seg_dataset import GaussianCrackSegDataset
 from unet_model import UNet
@@ -57,6 +55,22 @@ def get_in_channels(mode):
     else:
         raise ValueError(f"Unsupported mode: {mode}")
 
+def build_one_dataset(data_id, crack_root, mask_root, geom_root, mode):
+    crack_dir = os.path.join(crack_root, f"test_{data_id}")
+    mask_dir = os.path.join(mask_root, f"test_{data_id}")
+    geom_dir = os.path.join(geom_root, f"test_{data_id}")
+
+    print(f"[DATA] test_{data_id}")
+    print(f"  crack_dir = {crack_dir}")
+    print(f"  mask_dir  = {mask_dir}")
+    print(f"  geom_dir  = {geom_dir}")
+
+    return GaussianCrackSegDataset(
+        crack_dir=crack_dir,
+        mask_dir=mask_dir,
+        geom_dir=geom_dir,
+        mode=mode
+    )
 
 def main():
     parser = argparse.ArgumentParser()
@@ -66,22 +80,31 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--base_channels", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
+
+    # 组级训练/验证划分
+    parser.add_argument("--train_ids", type=str, default="1,2", help="训练集编号，例如 1,2")
+    parser.add_argument("--val_id", type=str, default="0", help="验证集编号，例如 0")
+
+    # 数据根目录
+    parser.add_argument("--crack_root", type=str, default="./synthetic_crack_images")
+    parser.add_argument("--mask_root", type=str, default="./synthetic_crack_masks")
+    parser.add_argument("--geom_root", type=str, default="../gaussian-splatting/output/test")
+
     args = parser.parse_args()
 
-    # ============= 可改参数 =============
-    crack_dir = r"./synthetic_crack_images/test_r1"
-    mask_dir = r"./synthetic_crack_masks/test_r1"
-    geom_dir = r"../gaussian-splatting/output/test/test_r1"
-
+    # ============= 训练参数 =============
     mode = args.mode
     batch_size = args.batch_size
     epochs = args.epochs
     lr = args.lr
-    val_ratio = 0.2
     num_workers = 0
     base_channels = args.base_channels
     seed = args.seed
-    save_dir = f"./checkpoints_unet/{mode}"
+
+    train_ids = [x.strip() for x in args.train_ids.split(",") if x.strip()]
+    val_id = args.val_id.strip()
+
+    save_dir = f"./checkpoints_unet/fold_val{val_id}/{mode}/seed{seed}"
     # ===================================
 
     os.makedirs(save_dir, exist_ok=True)
@@ -90,22 +113,30 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device)
 
-    full_dataset = GaussianCrackSegDataset(
-        crack_dir=crack_dir,
-        mask_dir=mask_dir,
-        geom_dir=geom_dir,
+    train_datasets = [
+        build_one_dataset(
+            data_id=train_id,
+            crack_root=args.crack_root,
+            mask_root=args.mask_root,
+            geom_root=args.geom_root,
+            mode=mode
+        )
+        for train_id in train_ids
+    ]
+
+    train_set = ConcatDataset(train_datasets)
+
+    val_set = build_one_dataset(
+        data_id=val_id,
+        crack_root=args.crack_root,
+        mask_root=args.mask_root,
+        geom_root=args.geom_root,
         mode=mode
     )
 
-    total_len = len(full_dataset)
-    val_len = max(1, int(total_len * val_ratio))
-    train_len = total_len - val_len
-
-    train_set, val_set = random_split(
-        full_dataset,
-        [train_len, val_len],
-        generator=torch.Generator().manual_seed(seed)
-    )
+    train_len = len(train_set)
+    val_len = len(val_set)
+    total_len = train_len + val_len
 
     train_loader = DataLoader(
         train_set,
@@ -134,8 +165,10 @@ def main():
 
     best_val_loss = 1e9
 
+    print(f"train_ids={train_ids}, val_id={val_id}")
     print(f"dataset total={total_len}, train={train_len}, val={val_len}")
     print(f"mode={mode}, in_channels={get_in_channels(mode)}")
+    print(f"save_dir={save_dir}")
 
     for epoch in range(1, epochs + 1):
         # -------- train --------

@@ -59,3 +59,6 @@ legacy_patchcore/memory_bank.pt
 legacy_patchcore/memory_bank_coreset.pt
 heritage_dataset.zip
 gaussian-splatting/output - 副本
+my_bridge_code/checkpoints_unet/*
+my_bridge_code/infer_results/*
+修改的代码.txt
