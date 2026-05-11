@@ -62,12 +62,25 @@ class GaussianCrackSegDataset(Dataset):
 
         if self.mode == "rgb":
             x = img
+
+        elif self.mode == "g0":
+            x = geom[0:1]
+
+        elif self.mode == "g0123":
+            x = geom[0:4]
+
+        elif self.mode == "g01234":
+            x = geom
+
         elif self.mode == "rgb_g0":
             x = torch.cat([img, geom[0:1]], dim=0)
+
         elif self.mode == "rgb_g0123":
             x = torch.cat([img, geom[0:4]], dim=0)
+
         elif self.mode == "rgb_g01234":
             x = torch.cat([img, geom], dim=0)
+
         else:
             raise ValueError(f"Unsupported mode: {self.mode}")
 

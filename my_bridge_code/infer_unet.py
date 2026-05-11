@@ -24,6 +24,12 @@ def set_seed(seed: int = 42):
 def get_in_channels(mode: str) -> int:
     if mode == "rgb":
         return 3
+    elif mode == "g0":
+        return 1
+    elif mode == "g0123":
+        return 4
+    elif mode == "g01234":
+        return 5
     elif mode == "rgb_g0":
         return 4
     elif mode == "rgb_g0123":
@@ -45,12 +51,33 @@ def to_uint8_gray(arr: np.ndarray) -> np.ndarray:
 
 def save_rgb_tensor(x: torch.Tensor, save_path: str):
     """
-    x: [C, H, W], 这里只保存前3通道作为RGB输入图
+    Save an input visualization.
+    For RGB-containing modes, save first 3 channels as RGB.
+    For geometry-only modes, save geometry channels as grayscale visualization.
     """
-    rgb = x[:3].detach().cpu().numpy().transpose(1, 2, 0)
-    rgb = np.clip(rgb, 0.0, 1.0)
-    rgb_u8 = (rgb * 255).astype(np.uint8)
-    Image.fromarray(rgb_u8).save(save_path)
+    x_np = x.detach().cpu().numpy()
+
+    # RGB or RGB+geometry: first 3 channels are RGB
+    if x_np.shape[0] >= 3:
+        rgb = x_np[:3].transpose(1, 2, 0)
+        rgb = np.clip(rgb, 0.0, 1.0)
+        rgb_u8 = (rgb * 255).astype(np.uint8)
+        Image.fromarray(rgb_u8).save(save_path)
+        return
+
+    # geometry-only g0: one channel
+    if x_np.shape[0] == 1:
+        g = x_np[0]
+        g = g.astype(np.float32)
+        g_min, g_max = np.percentile(g, 1), np.percentile(g, 99)
+        if g_max - g_min < 1e-8:
+            g_vis = np.zeros_like(g, dtype=np.uint8)
+        else:
+            g_vis = (np.clip((g - g_min) / (g_max - g_min), 0, 1) * 255).astype(np.uint8)
+        Image.fromarray(g_vis).save(save_path)
+        return
+
+    raise ValueError(f"Unsupported input shape for visualization: {x.shape}")
 
 
 def save_mask_tensor(mask: torch.Tensor, save_path: str):
@@ -183,8 +210,21 @@ def main():
 
     # checkpoint / mode
     parser.add_argument("--ckpt", type=str, required=True, help="Path to checkpoint, e.g. ./checkpoints_unet/rgb_g01234/best.pth")
-    parser.add_argument("--mode", type=str, default=None, choices=["rgb", "rgb_g0", "rgb_g0123", "rgb_g01234"],
-                        help="If not given, try reading mode from checkpoint")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default=None,
+        choices=[
+            "rgb",
+            "g0",
+            "g0123",
+            "g01234",
+            "rgb_g0",
+            "rgb_g0123",
+            "rgb_g01234",
+        ],
+        help="If not given, try reading mode from checkpoint"
+    )
 
     # data: 组级推理，与 train_unet.py 的 fold 划分保持一致
     parser.add_argument("--data_id", type=str, default="0", help="要推理的组编号，例如 0/1/2")

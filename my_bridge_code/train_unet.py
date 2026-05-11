@@ -47,6 +47,12 @@ def compute_iou_from_logits(logits, targets, thresh=0.5, eps=1e-6):
 def get_in_channels(mode):
     if mode == "rgb":
         return 3
+    elif mode == "g0":
+        return 1
+    elif mode == "g0123":
+        return 4
+    elif mode == "g01234":
+        return 5
     elif mode == "rgb_g0":
         return 4
     elif mode == "rgb_g0123":
@@ -75,7 +81,20 @@ def build_one_dataset(data_id, crack_root, mask_root, geom_root, mode):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="rgb", choices=["rgb", "rgb_g0", "rgb_g0123", "rgb_g01234"])
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="rgb",
+        choices=[
+            "rgb",
+            "g0",
+            "g0123",
+            "g01234",
+            "rgb_g0",
+            "rgb_g0123",
+            "rgb_g01234",
+        ]
+    )
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--lr", type=float, default=1e-3)

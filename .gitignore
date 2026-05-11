@@ -49,8 +49,9 @@ structure.txt
 gaussian-splatting/output
 heritage_dataset/images
 heritage_dataset/sparse
-my_bridge_code/synthetic_crack_images/
-my_bridge_code/synthetic_crack_masks/
+my_bridge_code/synthetic_crack_images_v3/
+my_bridge_code/synthetic_crack_masks_v3/
+my_bridge_code/synthetic_crack_debug_v3/
 legacy_patchcore/anomaly_maps/
 legacy_patchcore/anomaly_maps_rgb/
 legacy_patchcore/visualizations/
@@ -59,6 +60,7 @@ legacy_patchcore/memory_bank.pt
 legacy_patchcore/memory_bank_coreset.pt
 heritage_dataset.zip
 gaussian-splatting/output - 副本
-my_bridge_code/checkpoints_unet/*
-my_bridge_code/infer_results/*
+my_bridge_code/checkpoints_unet_v3/*
+my_bridge_code/infer_results_v3/*
 修改的代码.txt
+my_bridge_code/过往版本
