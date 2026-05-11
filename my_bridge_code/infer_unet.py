@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 
 import torch
-from torch.utils.data import DataLoader, Subset, random_split
+from torch.utils.data import DataLoader
 
 from gaussian_crack_seg_dataset import GaussianCrackSegDataset
 from unet_model import UNet
@@ -83,46 +83,34 @@ def make_overlay(rgb_tensor: torch.Tensor, pred_mask: np.ndarray, alpha: float =
     return Image.fromarray(overlay_u8)
 
 
-def build_dataset(
-    crack_dir: str,
-    mask_dir: str,
-    geom_dir: str,
+def build_one_dataset(
+    data_id: str,
+    crack_root: str,
+    mask_root: str,
+    geom_root: str,
     mode: str,
 ):
+    """
+    按组级划分读取数据，例如：
+    data_id=0 -> test_0
+    data_id=1 -> test_1
+    data_id=2 -> test_2
+    """
+    crack_dir = os.path.join(crack_root, f"test_{data_id}")
+    mask_dir = os.path.join(mask_root, f"test_{data_id}")
+    geom_dir = os.path.join(geom_root, f"test_{data_id}")
+
+    print(f"[DATA] test_{data_id}")
+    print(f"  crack_dir = {crack_dir}")
+    print(f"  mask_dir  = {mask_dir}")
+    print(f"  geom_dir  = {geom_dir}")
+
     return GaussianCrackSegDataset(
         crack_dir=crack_dir,
         mask_dir=mask_dir,
         geom_dir=geom_dir,
         mode=mode,
     )
-
-
-def build_subset(
-    dataset,
-    split: str,
-    val_ratio: float,
-    seed: int,
-):
-    total_len = len(dataset)
-
-    if split == "all":
-        return dataset
-
-    val_len = max(1, int(total_len * val_ratio))
-    train_len = total_len - val_len
-
-    train_set, val_set = random_split(
-        dataset,
-        [train_len, val_len],
-        generator=torch.Generator().manual_seed(seed)
-    )
-
-    if split == "train":
-        return train_set
-    elif split == "val":
-        return val_set
-    else:
-        raise ValueError(f"Unsupported split: {split}")
 
 
 def infer_one_epoch(
@@ -198,14 +186,13 @@ def main():
     parser.add_argument("--mode", type=str, default=None, choices=["rgb", "rgb_g0", "rgb_g0123", "rgb_g01234"],
                         help="If not given, try reading mode from checkpoint")
 
-    # data
-    parser.add_argument("--crack_dir", type=str, default=r"./synthetic_crack_images/test_r1")
-    parser.add_argument("--mask_dir", type=str, default=r"./synthetic_crack_masks/test_r1")
-    parser.add_argument("--geom_dir", type=str, default=r"../gaussian-splatting/output/test/test_r1")
+    # data: 组级推理，与 train_unet.py 的 fold 划分保持一致
+    parser.add_argument("--data_id", type=str, default="0", help="要推理的组编号，例如 0/1/2")
+    parser.add_argument("--crack_root", type=str, default="./synthetic_crack_images_v2")
+    parser.add_argument("--mask_root", type=str, default="./synthetic_crack_masks_v2")
+    parser.add_argument("--geom_root", type=str, default="../gaussian-splatting/output/test")
 
-    # split
-    parser.add_argument("--split", type=str, default="val", choices=["all", "train", "val"])
-    parser.add_argument("--val_ratio", type=float, default=0.2)
+    # seed 只用于固定随机性；当前不再做 random_split
     parser.add_argument("--seed", type=int, default=42)
 
     # model
@@ -238,22 +225,16 @@ def main():
 
     print(f"mode: {mode}")
 
-    dataset = build_dataset(
-        crack_dir=args.crack_dir,
-        mask_dir=args.mask_dir,
-        geom_dir=args.geom_dir,
+    dataset = build_one_dataset(
+        data_id=args.data_id,
+        crack_root=args.crack_root,
+        mask_root=args.mask_root,
+        geom_root=args.geom_root,
         mode=mode,
     )
 
-    subset = build_subset(
-        dataset=dataset,
-        split=args.split,
-        val_ratio=args.val_ratio,
-        seed=args.seed,
-    )
-
     loader = DataLoader(
-        subset,
+        dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
@@ -276,7 +257,12 @@ def main():
 
     if args.save_dir is None:
         ckpt_name = os.path.splitext(os.path.basename(args.ckpt))[0]
-        save_dir = os.path.join("./infer_results", mode, args.split, ckpt_name)
+        save_dir = os.path.join(
+            "./infer_results_v3",
+            f"test_{args.data_id}",
+            mode,
+            ckpt_name
+        )
     else:
         save_dir = args.save_dir
 

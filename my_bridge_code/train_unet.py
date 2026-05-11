@@ -105,7 +105,7 @@ def main():
     train_ids = [x.strip() for x in args.train_ids.split(",") if x.strip()]
     val_id = args.val_id.strip()
 
-    save_dir = f"./checkpoints_unet_v2/fold_val{val_id}/{mode}/seed{seed}"
+    save_dir = f"./checkpoints_unet_v3/fold_val{val_id}/{mode}/seed{seed}"
     # ===================================
 
     os.makedirs(save_dir, exist_ok=True)
