@@ -64,3 +64,4 @@ my_bridge_code/checkpoints_unet_v3/*
 my_bridge_code/infer_results_v3/*
 修改的代码.txt
 my_bridge_code/过往版本
+my_bridge_code/metrics_summary_test0.csv

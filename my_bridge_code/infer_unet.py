@@ -1,4 +1,3 @@
-
 import os
 import argparse
 import random
@@ -12,6 +11,17 @@ from torch.utils.data import DataLoader
 
 from gaussian_crack_seg_dataset import GaussianCrackSegDataset
 from unet_model import UNet
+
+
+ALL_MODES = [
+    "rgb",
+    "g0",
+    "g0123",
+    "g01234",
+    "rgb_g0",
+    "rgb_g0123",
+    "rgb_g01234",
+]
 
 
 def set_seed(seed: int = 42):
@@ -49,80 +59,68 @@ def to_uint8_gray(arr: np.ndarray) -> np.ndarray:
     return (arr * 255).astype(np.uint8)
 
 
-def save_rgb_tensor(x: torch.Tensor, save_path: str):
-    """
-    Save an input visualization.
-    For RGB-containing modes, save first 3 channels as RGB.
-    For geometry-only modes, save geometry channels as grayscale visualization.
-    """
+def geometry_to_uint8(g: np.ndarray) -> np.ndarray:
+    g = g.astype(np.float32)
+    g_min, g_max = np.percentile(g, 1), np.percentile(g, 99)
+    if g_max - g_min < 1e-8:
+        return np.zeros_like(g, dtype=np.uint8)
+    return (np.clip((g - g_min) / (g_max - g_min), 0, 1) * 255).astype(np.uint8)
+
+
+# ===========================
+# 修改后的输入可视化函数
+# ===========================
+def save_input_visualization(x: torch.Tensor, mode: str, sample_dir: str):
     x_np = x.detach().cpu().numpy()
 
-    # RGB or RGB+geometry: first 3 channels are RGB
-    if x_np.shape[0] >= 3:
-        rgb = x_np[:3].transpose(1, 2, 0)
-        rgb = np.clip(rgb, 0.0, 1.0)
-        rgb_u8 = (rgb * 255).astype(np.uint8)
-        Image.fromarray(rgb_u8).save(save_path)
-        return
-
-    # geometry-only g0: one channel
-    if x_np.shape[0] == 1:
-        g = x_np[0]
-        g = g.astype(np.float32)
-        g_min, g_max = np.percentile(g, 1), np.percentile(g, 99)
-        if g_max - g_min < 1e-8:
-            g_vis = np.zeros_like(g, dtype=np.uint8)
-        else:
-            g_vis = (np.clip((g - g_min) / (g_max - g_min), 0, 1) * 255).astype(np.uint8)
-        Image.fromarray(g_vis).save(save_path)
-        return
-
-    raise ValueError(f"Unsupported input shape for visualization: {x.shape}")
+    if mode == "rgb":
+        rgb = np.clip(x_np[:3].transpose(1, 2, 0), 0.0, 1.0)
+        Image.fromarray((rgb * 255).astype(np.uint8)).save(os.path.join(sample_dir, "input_rgb.png"))
+    else:
+        # 单通道 / 多通道 geom 模式只保存第一个通道
+        first_geom = geometry_to_uint8(x_np[0])
+        Image.fromarray(first_geom).save(os.path.join(sample_dir, "input_rgb.png"))
 
 
 def save_mask_tensor(mask: torch.Tensor, save_path: str):
-    """
-    mask: [1, H, W] 或 [H, W]
-    """
     if mask.ndim == 3:
         mask = mask[0]
     mask_np = mask.detach().cpu().numpy()
     Image.fromarray(to_uint8_gray(mask_np)).save(save_path)
 
 
-def make_overlay(rgb_tensor: torch.Tensor, pred_mask: np.ndarray, alpha: float = 0.45) -> Image.Image:
-    """
-    pred_mask: [H, W], 0/1
-    把预测结果以红色叠加到 RGB 上
-    """
-    rgb = rgb_tensor[:3].detach().cpu().numpy().transpose(1, 2, 0)
-    rgb = np.clip(rgb, 0.0, 1.0)
+def load_crack_rgb(meta, b: int, fallback: torch.Tensor) -> np.ndarray:
+    crack_paths = meta.get("crack_path")
+    if crack_paths is not None:
+        crack_path = crack_paths[b]
+        if os.path.exists(crack_path):
+            return np.array(Image.open(crack_path).convert("RGB"), dtype=np.float32) / 255.0
 
+    x_np = fallback.detach().cpu().numpy()
+    if x_np.shape[0] >= 3:
+        return np.clip(x_np[:3].transpose(1, 2, 0), 0.0, 1.0)
+
+    gray = geometry_to_uint8(x_np[0]).astype(np.float32) / 255.0
+    return np.repeat(gray[..., None], 3, axis=2)
+
+
+def make_overlay(base_rgb: np.ndarray, pred_mask: np.ndarray, alpha: float = 0.45) -> Image.Image:
+    rgb = np.clip(base_rgb, 0.0, 1.0)
     overlay = rgb.copy()
     red = np.zeros_like(rgb)
-    red[..., 0] = 1.0  # 红色通道
+    red[..., 0] = 1.0
 
     mask_3 = pred_mask[..., None].astype(np.float32)
     overlay = overlay * (1 - alpha * mask_3) + red * (alpha * mask_3)
     overlay = np.clip(overlay, 0.0, 1.0)
 
-    overlay_u8 = (overlay * 255).astype(np.uint8)
-    return Image.fromarray(overlay_u8)
+    return Image.fromarray((overlay * 255).astype(np.uint8))
 
 
-def build_one_dataset(
-    data_id: str,
-    crack_root: str,
-    mask_root: str,
-    geom_root: str,
-    mode: str,
-):
-    """
-    按组级划分读取数据，例如：
-    data_id=0 -> test_0
-    data_id=1 -> test_1
-    data_id=2 -> test_2
-    """
+# ===========================
+# 数据集 / 推理函数
+# ===========================
+def build_one_dataset(data_id: str, crack_root: str, mask_root: str, geom_root: str, mode: str):
     crack_dir = os.path.join(crack_root, f"test_{data_id}")
     mask_dir = os.path.join(mask_root, f"test_{data_id}")
     geom_dir = os.path.join(geom_root, f"test_{data_id}")
@@ -132,12 +130,7 @@ def build_one_dataset(
     print(f"  mask_dir  = {mask_dir}")
     print(f"  geom_dir  = {geom_dir}")
 
-    return GaussianCrackSegDataset(
-        crack_dir=crack_dir,
-        mask_dir=mask_dir,
-        geom_dir=geom_dir,
-        mode=mode,
-    )
+    return GaussianCrackSegDataset(crack_dir, mask_dir, geom_dir, mode)
 
 
 def infer_one_epoch(
@@ -146,6 +139,7 @@ def infer_one_epoch(
     device: torch.device,
     save_dir: str,
     threshold: float,
+    mode: str,
     max_samples: Optional[int] = None,
 ):
     model.eval()
@@ -175,26 +169,19 @@ def infer_one_epoch(
                 prob_b = probs[b, 0].cpu().numpy()
                 pred_b = preds[b, 0].cpu().numpy()
 
-                # 1. 输入RGB
-                save_rgb_tensor(x_b, os.path.join(sample_dir, "input_rgb.png"))
-
-                # 2. GT
+                save_input_visualization(x_b, mode, sample_dir)
                 save_mask_tensor(mask_b, os.path.join(sample_dir, "gt_mask.png"))
-
-                # 3. 概率图
                 Image.fromarray(to_uint8_gray(prob_b)).save(os.path.join(sample_dir, "pred_prob.png"))
-
-                # 4. 二值图
                 Image.fromarray((pred_b * 255).astype(np.uint8)).save(os.path.join(sample_dir, "pred_mask.png"))
 
-                # 5. overlay
-                overlay = make_overlay(x_b, pred_b.astype(np.uint8), alpha=0.45)
+                base_rgb = load_crack_rgb(meta, b, x_b)
+                overlay = make_overlay(base_rgb, pred_b.astype(np.uint8), alpha=0.45)
                 overlay.save(os.path.join(sample_dir, "overlay.png"))
 
-                # 6. 保存简单meta
                 with open(os.path.join(sample_dir, "meta.txt"), "w", encoding="utf-8") as f:
                     f.write(f"idx: {idx}\n")
                     f.write(f"crack_name: {crack_name}\n")
+                    f.write(f"mode: {mode}\n")
                     f.write(f"threshold: {threshold}\n")
 
                 count += 1
@@ -205,63 +192,14 @@ def infer_one_epoch(
     print(f"[OK] inference finished, total saved samples: {count}")
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def run_inference(args, mode: str, ckpt_path: str, device: torch.device):
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
-    # checkpoint / mode
-    parser.add_argument("--ckpt", type=str, required=True, help="Path to checkpoint, e.g. ./checkpoints_unet/rgb_g01234/best.pth")
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default=None,
-        choices=[
-            "rgb",
-            "g0",
-            "g0123",
-            "g01234",
-            "rgb_g0",
-            "rgb_g0123",
-            "rgb_g01234",
-        ],
-        help="If not given, try reading mode from checkpoint"
-    )
-
-    # data: 组级推理，与 train_unet.py 的 fold 划分保持一致
-    parser.add_argument("--data_id", type=str, default="0", help="要推理的组编号，例如 0/1/2")
-    parser.add_argument("--crack_root", type=str, default="./synthetic_crack_images_v2")
-    parser.add_argument("--mask_root", type=str, default="./synthetic_crack_masks_v2")
-    parser.add_argument("--geom_root", type=str, default="../gaussian-splatting/output/test")
-
-    # seed 只用于固定随机性；当前不再做 random_split
-    parser.add_argument("--seed", type=int, default=42)
-
-    # model
-    parser.add_argument("--base_channels", type=int, default=16)
-
-    # inference
-    parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--threshold", type=float, default=0.5)
-    parser.add_argument("--max_samples", type=int, default=None)
-
-    # save
-    parser.add_argument("--save_dir", type=str, default=None)
-
-    args = parser.parse_args()
-    set_seed(args.seed)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("device:", device)
-
-    if not os.path.exists(args.ckpt):
-        raise FileNotFoundError(f"Checkpoint not found: {args.ckpt}")
-
-    ckpt = torch.load(args.ckpt, map_location=device)
-
-    # mode 优先级：命令行 > checkpoint
-    mode = args.mode if args.mode is not None else ckpt.get("mode", None)
-    if mode is None:
-        raise ValueError("Mode is not provided and not found in checkpoint.")
+    ckpt = torch.load(ckpt_path, map_location=device)
+    ckpt_mode = ckpt.get("mode", None)
+    if ckpt_mode is not None and ckpt_mode != mode:
+        print(f"[WARN] checkpoint mode={ckpt_mode}, command mode={mode}; use command mode.")
 
     print(f"mode: {mode}")
 
@@ -291,20 +229,18 @@ def main():
         raise KeyError("Checkpoint missing 'model_state_dict'.")
 
     model.load_state_dict(ckpt["model_state_dict"], strict=True)
-    print(f"[OK] loaded checkpoint: {args.ckpt}")
+    print(f"[OK] loaded checkpoint: {ckpt_path}")
     if "epoch" in ckpt:
         print(f"[OK] checkpoint epoch: {ckpt['epoch']}")
 
     if args.save_dir is None:
-        ckpt_name = os.path.splitext(os.path.basename(args.ckpt))[0]
-        save_dir = os.path.join(
-            "./infer_results_v3",
-            f"test_{args.data_id}",
-            mode,
-            ckpt_name
-        )
+        if args.ablation:
+            save_dir = os.path.join("./infer_results_v3", f"test_{args.data_id}", mode)
+        else:
+            ckpt_name = os.path.splitext(os.path.basename(ckpt_path))[0]
+            save_dir = os.path.join("./infer_results_v3", f"test_{args.data_id}", mode, ckpt_name)
     else:
-        save_dir = args.save_dir
+        save_dir = os.path.join(args.save_dir, mode) if args.ablation else args.save_dir
 
     ensure_dir(save_dir)
     print(f"save_dir: {save_dir}")
@@ -315,8 +251,73 @@ def main():
         device=device,
         save_dir=save_dir,
         threshold=args.threshold,
+        mode=mode,
         max_samples=args.max_samples,
     )
+
+
+def parse_modes(modes: str):
+    parsed = [m.strip() for m in modes.split(",") if m.strip()]
+    bad_modes = [m for m in parsed if m not in ALL_MODES]
+    if bad_modes:
+        raise ValueError(f"Unsupported modes: {bad_modes}")
+    return parsed
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--ckpt", type=str, default=None, help="Path to checkpoint for single-mode inference")
+    parser.add_argument("--mode", type=str, default=None, choices=ALL_MODES, help="If not given, try reading mode from checkpoint")
+    parser.add_argument("--ablation", action="store_true", help="Run multiple ablation modes from a checkpoint root")
+    parser.add_argument("--modes", type=str, default="rgb,g0,g0123,g01234,rgb_g0,rgb_g0123,rgb_g01234")
+    parser.add_argument("--ckpt_root", type=str, default="./checkpoints_unet_v3")
+    parser.add_argument("--val_id", type=str, default="0")
+    parser.add_argument("--ckpt_name", type=str, default="best_iou.pth")
+
+    parser.add_argument("--data_id", type=str, default="0")
+    parser.add_argument("--crack_root", type=str, default="./synthetic_crack_images_v2")
+    parser.add_argument("--mask_root", type=str, default="./synthetic_crack_masks_v2")
+    parser.add_argument("--geom_root", type=str, default="../gaussian-splatting/output/test")
+
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--base_channels", type=int, default=16)
+
+    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--max_samples", type=int, default=None)
+
+    parser.add_argument("--save_dir", type=str, default=None)
+
+    args = parser.parse_args()
+    set_seed(args.seed)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("device:", device)
+
+    if args.ablation:
+        for mode in parse_modes(args.modes):
+            ckpt_path = os.path.join(
+                args.ckpt_root,
+                f"fold_val{args.val_id}",
+                mode,
+                f"seed{args.seed}",
+                args.ckpt_name,
+            )
+            print(f"\n========== ablation mode: {mode} ==========")
+            run_inference(args, mode, ckpt_path, device)
+        return
+
+    if args.ckpt is None:
+        raise ValueError("--ckpt is required unless --ablation is used.")
+
+    ckpt = torch.load(args.ckpt, map_location=device)
+    mode = args.mode if args.mode is not None else ckpt.get("mode", None)
+    if mode is None:
+        raise ValueError("Mode is not provided and not found in checkpoint.")
+
+    run_inference(args, mode, args.ckpt, device)
 
 
 if __name__ == "__main__":

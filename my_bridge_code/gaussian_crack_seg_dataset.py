@@ -87,6 +87,7 @@ class GaussianCrackSegDataset(Dataset):
         meta = {
             "idx": int(idx),
             "crack_name": crack_name,
+            "crack_path": crack_path,
         }
 
         return x, mask, meta
